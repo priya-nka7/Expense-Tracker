@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8" />
+    <title>Expense Tracker</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 700px;
+            margin: 20px auto;
+            padding: 10px;
+        }
+
+        input,
+        button {
+            padding: 8px;
+            margin: 5px 0;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        .row {
+            display: flex;
+            gap: 10px;
+        }
+
+        .row input {
+            flex: 1;
+        }
+
+        .expense {
+            border: 1px solid #ddd;
+            padding: 8px;
+            margin: 6px 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .meta {
+            font-size: 0.9em;
+            color: #555;
+        }
+
+        .actions button {
+            margin-left: 6px;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Expense Tracker</h1>
+
+    <h3>Add Expense</h3>
+    <input id="title" placeholder="Title">
+    <input id="amount" type="number" step="0.01" placeholder="Amount">
+    <input id="category" placeholder="Category">
+    <input id="date" type="date">
+    <button onclick="addExpense()">Add Expense</button>
+
+    <h3>Search</h3>
+    <div class="row">
+        <input id="searchCategory" placeholder="Search by category (e.g., Food)">
+        <input id="searchDate" type="date" placeholder="Search by date">
+    </div>
+    <div class="row">
+        <button onclick="searchExpenses()">Search</button>
+        <button onclick="fetchExpenses()">Show All</button>
+    </div>
+
+    <h3>Expenses</h3>
+    <div id="expenses"></div>
+
+    <script>
+  // Fetch and display all expenses grouped by month
+  async function fetchExpenses() {
+    const res = await fetch("/expenses/grouped");
+    const data = await res.json();
+
+    const container = document.getElementById("expenses");
+    container.innerHTML = "";
+
+    if (Object.keys(data).length === 0) {
+      container.innerHTML = "<p>No expenses found.</p>";
+      return;
+    }
+
+    for (const month in data) {
+      const section = document.createElement("div");
+      section.className = "month-block";
+      section.innerHTML = `<h3>${month} - Total: ₹${data[month].total}</h3>`;
+
+      const list = document.createElement("ul");
+      data[month].expenses.forEach(e => {
+        list.innerHTML += `
+          <li>
+            <strong>${e.title}</strong> - ₹${e.amount} · ${e.category} · ${e.date}
+            <button onclick="deleteExpense(${e.id})">Delete</button>
+          </li>`;
+      });
+
+      section.appendChild(list);
+      container.appendChild(section);
+    }
+  }
+
+  // Add new expense
+  async function addExpense() {
+    const title = document.getElementById("title").value.trim();
+    const amount = document.getElementById("amount").value;
+    const category = document.getElementById("category").value.trim();
+    const date = document.getElementById("date").value;
+
+    if (!title || !amount || !category || !date) {
+      alert("Please fill all fields");
+      return;
+    }
+
+    await fetch("/expenses", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title, amount, category, date })
+    });
+
+    // Clear inputs
+    document.getElementById("title").value = "";
+    document.getElementById("amount").value = "";
+    document.getElementById("category").value = "";
+    document.getElementById("date").value = "";
+
+    fetchExpenses(); // Refresh after adding
+  }
+
+  // Delete expense
+  async function deleteExpense(id) {
+    if (!confirm("Delete this expense?")) return;
+    await fetch(`/expenses/${id}`, { method: "DELETE" });
+    fetchExpenses();
+  }
+
+  // Search expenses by category/date (works with grouped view)
+  async function searchExpenses() {
+    const categoryFilter = document.getElementById("searchCategory").value.trim().toLowerCase();
+    const dateFilter = document.getElementById("searchDate").value;
+
+    const res = await fetch("/expenses/grouped");
+    const data = await res.json();
+
+    const container = document.getElementById("expenses");
+    container.innerHTML = "";
+
+    const filteredData = {};
+
+    for (const month in data) {
+      const expenses = data[month].expenses.filter(e => {
+        const categoryMatch = !categoryFilter || e.category.toLowerCase().includes(categoryFilter);
+        const dateMatch = !dateFilter || e.date === dateFilter;
+        return categoryMatch && dateMatch;
+      });
+
+      if (expenses.length > 0) {
+        filteredData[month] = {
+          expenses: expenses,
+          total: expenses.reduce((sum, e) => sum + parseFloat(e.amount), 0)
+        };
+      }
+    }
+
+    if (Object.keys(filteredData).length === 0) {
+      container.innerHTML = "<p>No expenses found.</p>";
+      return;
+    }
+
+    // Render filtered grouped expenses
+    for (const month in filteredData) {
+      const section = document.createElement("div");
+      section.className = "month-block";
+      section.innerHTML = `<h3>${month} - Total: ₹${filteredData[month].total}</h3>`;
+
+      const list = document.createElement("ul");
+      filteredData[month].expenses.forEach(e => {
+        list.innerHTML += `
+          <li>
+            <strong>${e.title}</strong> - ₹${e.amount} · ${e.category} · ${e.date}
+            <button onclick="deleteExpense(${e.id})">Delete</button>
+          </li>`;
+      });
+
+      section.appendChild(list);
+      container.appendChild(section);
+    }
+  }
+
+  // Initial load
+  fetchExpenses();
+</script>
+
+</body>
+
+</html>
